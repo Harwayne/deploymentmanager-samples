@@ -37,6 +37,8 @@ resources:
       masterAuth:
           "clientCertificateConfig":
               "issueClientCertificate": false
+      workloadIdentityConfig:
+        workloadPool: {{ env['project'] }}.svc.id.goog
       "nodePools":
           -   "autoscaling":
                   "enabled": true
@@ -57,8 +59,6 @@ resources:
               "name": "default-pool"
               "upgradeSettings":
                   "maxSurge": 1
-              workloadIdentityConfig:
-                workloadPool: {{ env['project'] }}.svc.id.goog
       "releaseChannel":
           "channel": "RAPID"
 
@@ -98,6 +98,9 @@ resources:
 
 - name: cloud-run
   type: {{ env['project'] }}/{{ TYPE_NAME }}:/apis/operator.run.cloud.google.com/v1alpha1/namespaces/{namespace}/cloudruns/{name}
+  metadata:
+    dependsOn:
+    - {{ TYPE_NAME }}
   properties:
     apiVersion: operator.run.cloud.google.com/v1alpha1
     kind: CloudRun
@@ -112,6 +115,7 @@ resources:
   type: {{ env['project'] }}/{{ TYPE_NAME }}:/api/v1/namespaces/{namespace}/serviceaccounts/{name}
   metadata:
     dependsOn:
+    - {{ TYPE_NAME }}
     - cloud-run
   properties:
     apiVersion: v1
@@ -125,6 +129,7 @@ resources:
   type: {{ env['project'] }}/{{ TYPE_NAME }}:/api/v1/namespaces/{namespace}/serviceaccounts/{name}
   metadata:
     dependsOn:
+    - {{ TYPE_NAME }}
     - cloud-run
   properties:
     apiVersion: v1
@@ -140,6 +145,7 @@ resources:
   type: {{ env['project'] }}/{{ TYPE_NAME }}:/api/v1/namespaces/{namespace}/configmaps/{name}
   metadata:
     dependsOn:
+    - {{ TYPE_NAME }}
     - cloud-run
   properties:
     apiVersion: v1

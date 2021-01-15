@@ -16,7 +16,7 @@ imports:
 - path: cluster.jinja
 
 resources:
-- name: my-cluster2
+- name: dm-cluster
   type: cluster.jinja
   properties:
     zone: us-central1-a

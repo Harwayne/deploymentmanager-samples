@@ -50,3 +50,10 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
+
+# Editor/IDE files #
+####################
+.idea
+.vscode/
+*.iml
+*~

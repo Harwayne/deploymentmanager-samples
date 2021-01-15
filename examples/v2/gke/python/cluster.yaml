@@ -13,11 +13,10 @@
 # limitations under the License.
 
 imports:
-- path: cluster.py
+  - path: cluster.py
 
 resources:
-- name: my-cluster
-  type: cluster.py
-  properties:
-    zone: ZONE_TO_RUN
-
+  - name: my-cluster
+    type: cluster.py
+    properties:
+      zone: us-central1-a
