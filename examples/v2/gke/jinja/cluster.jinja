@@ -15,7 +15,6 @@ limitations under the License.
 {% set NAME_PREFIX = env['deployment'] + '-' + env['name'] %}
 {% set CLUSTER_NAME = NAME_PREFIX %}
 {% set TYPE_NAME = NAME_PREFIX + '-type' %}
-{% set K8S_ENDPOINTS = {'': 'api/v1', '-apps': 'apis/apps/v1beta1', '-v1beta1-extensions': 'apis/extensions/v1beta1'} %}
 
 resources:
 - name: {{ CLUSTER_NAME }}
@@ -24,15 +23,47 @@ resources:
     zone: {{ properties['zone'] }}
     cluster:
       name: {{ CLUSTER_NAME }}
-      initialNodeCount: {{ properties['initialNodeCount'] }}
-      nodeConfig:
-        oauthScopes:
-        - https://www.googleapis.com/auth/compute
-        - https://www.googleapis.com/auth/devstorage.read_only
-        - https://www.googleapis.com/auth/logging.write
-        - https://www.googleapis.com/auth/monitoring
-{% for typeSuffix, endpoint in K8S_ENDPOINTS.items() %}
-- name: {{ TYPE_NAME }}{{ typeSuffix }}
+      addonsConfig:
+            cloudRunConfig:
+                disabled: false
+            horizontalPodAutoscaling:
+                disabled: false
+            httpLoadBalancing:
+                disabled: false
+            kubernetesDashboard:
+                disabled: true
+            networkPolicyConfig:
+                disabled: true
+      masterAuth:
+          "clientCertificateConfig":
+              "issueClientCertificate": false
+      "nodePools":
+          -   "autoscaling":
+                  "enabled": true
+                  "maxNodeCount": 10
+                  "minNodeCount": 3
+              "config":
+                  "imageType": "cos"
+                  "machineType": "n1-standard-4"
+                  "oauthScopes":
+                    -  "https://www.googleapis.com/auth/cloud-platform"
+                    -  "https://www.googleapis.com/auth/logging.write"
+                    -  "https://www.googleapis.com/auth/monitoring.write"
+                    -  "https://www.googleapis.com/auth/pubsub"
+              "initialNodeCount": 3
+              "management":
+                  "autoRepair": true
+                  "autoUpgrade": true
+              "name": "default-pool"
+              "upgradeSettings":
+                  "maxSurge": 1
+              workloadIdentityConfig:
+                workloadPool: {{ env['project'] }}.svc.id.goog
+      "releaseChannel":
+          "channel": "RAPID"
+
+
+- name: {{ TYPE_NAME }}
   type: deploymentmanager.v2beta.typeProvider
   properties:
     options:
@@ -49,22 +80,116 @@ resources:
       inputMappings:
       - fieldName: name
         location: PATH
-        methodMatch: ^(GET|DELETE|PUT)$
+        methodMatch: ^(get|delete|put|patch|post)$
         value: $.ifNull($.resource.properties.metadata.name, $.resource.name)
-      - fieldName: metadata.name
+      - fieldName: namespace
+        location: PATH
+        methodMatch: ^(get|delete|put|patch|post)$
+        value: $.resource.properties.metadata.namespace
+      - fieldName: metadata.resourceVersion
         location: BODY
-        methodMatch: ^(PUT|POST)$
-        value: $.ifNull($.resource.properties.metadata.name, $.resource.name)
+        methodMatch: ^(put)$
+        value: $.resource.self.metadata.resourceVersion
       - fieldName: Authorization
         location: HEADER
         value: >
           $.concat("Bearer ", $.googleOauth2AccessToken())
-    descriptorUrl: https://$(ref.{{ CLUSTER_NAME }}.endpoint)/swaggerapi/{{ endpoint }}
-{% endfor %}
+    descriptorUrl: https://$(ref.{{ CLUSTER_NAME }}.endpoint)/openapi/v2
 
-outputs:
-{% for typeSuffix, endpoint in K8S_ENDPOINTS.items() %}
-- name: clusterType{{ typeSuffix }}
-  value: {{ TYPE_NAME }}{{ typeSuffix }}
-{% endfor %}
+- name: cloud-run
+  type: {{ env['project'] }}/{{ TYPE_NAME }}:/apis/operator.run.cloud.google.com/v1alpha1/namespaces/{namespace}/cloudruns/{name}
+  properties:
+    apiVersion: operator.run.cloud.google.com/v1alpha1
+    kind: CloudRun
+    metadata:
+      namespace: cloud-run-system
+      name: cloud-run
+    spec:
+      eventing:
+        enabled: true
+
+- name: control-plane-ksa
+  type: {{ env['project'] }}/{{ TYPE_NAME }}:/api/v1/namespaces/{namespace}/serviceaccounts/{name}
+  metadata:
+    dependsOn:
+    - cloud-run
+  properties:
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      namespace: cloud-run-events
+      name: controller
+      annotations:
+        iam.gke.io/gcp-service-account: cloud-run-events2@{{ env['project'] }}.iam.gserviceaccount.com
+- name: broker-data-plane-ksa
+  type: {{ env['project'] }}/{{ TYPE_NAME }}:/api/v1/namespaces/{namespace}/serviceaccounts/{name}
+  metadata:
+    dependsOn:
+    - cloud-run
+  properties:
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      namespace: cloud-run-events
+      name: broker
+      annotations:
+        iam.gke.io/gcp-service-account: cloud-run-events2-broker@{{ env['project'] }}.iam.gserviceaccount.com
+
+
+- name: config-gcp-auth
+  type: {{ env['project'] }}/{{ TYPE_NAME }}:/api/v1/namespaces/{namespace}/configmaps/{name}
+  metadata:
+    dependsOn:
+    - cloud-run
+  properties:
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      namespace: cloud-run-events
+      name: config-gcp-auth
+      annotations:
+        events.cloud.google.com/initialized: "true"
+    data:
+      default-auth-config: |
+        clusterDefault:
+          serviceAccountName: cloud-run-events-sources
+          workloadIdentityMapping:
+            cloud-run-events-sources: cloud-run-events2-sources@{{ env['project'] }}.iam.gserviceaccount.com
+
+- name: cloud-run-events2
+  type: iam.v1.serviceAccount
+  metadata:
+    accessControl:
+      gcpIamPolicy:
+        bindings:
+        - role: roles/iam.workloadIdentityUser
+          members:
+          - serviceAccount:{{ env['project'] }}.goog.svc.id[cloud-run-events/controller]
+  properties:
+    accountId: cloud-run-events2
+- name: cloud-run-events2-broker
+  type: iam.v1.serviceAccount
+  metadata:
+    accessControl:
+      gcpIamPolicy:
+        bindings:
+        - role: roles/iam.workloadIdentityUser
+          members:
+          - serviceAccount:{{ env['project'] }}.goog.svc.id[cloud-run-events/broker]
+  properties:
+    accountId: cloud-run-events2-broker
+- name: cloud-run-events2-sources
+  type: iam.v1.serviceAccount
+  metadata:
+    dependsOn:
+    - cloud-run-events2
+    accessControl:
+      gcpIamPolicy:
+        bindings:
+        - role: roles/iam.serviceAccountAdmin
+          members:
+          - serviceAccount:cloud-run-events2@{{ env['project'] }}.iam.gserviceaccount.com
+  properties:
+    accountId: cloud-run-events2-sources
+
 
