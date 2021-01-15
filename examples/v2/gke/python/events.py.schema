@@ -47,3 +47,6 @@ properties:
   grantGSAsPermissionsOnProject:
     type: boolean
     default: false
+  concurrentAPIActivation:
+    type: boolean
+    default: true

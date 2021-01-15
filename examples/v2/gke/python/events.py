@@ -36,7 +36,15 @@ def GenerateConfig(context):
 
     # 1. Enables the required APIs on the project (optional).
     if context.properties['activateAPIsOnProject']:
-        pass
+        resources.extend(activateAPIResources(context, [
+            'cloudresourcemanager.googleapis.com',
+            'cloudscheduler.googleapis.com',
+            'logging.googleapis.com',
+            'pubsub.googleapis.com',
+            'stackdriver.googleapis.com',
+            'storage-api.googleapis.com',
+            'storage-component.googleapis.com',
+        ]))
 
     operatorEnableEventingName = 'cloud-run'
 
@@ -143,7 +151,36 @@ def GenerateConfig(context):
 
     # 4. Gives the three GSAs the required permissions on the project (optional).
     if context.properties['grantGSAsPermissionsOnProject']:
-        pass
+        resources.append({
+            'name': 'controller-gsa-permissions',
+            'type': 'gcp-types/cloudresourcemanager-v1:virtual.projects.iamMemberBinding',
+            'properties': {
+                'resource': context.env['project'],
+                # TODO: Reduce scope.
+                'role': 'roles/editor',
+                'member': ''.join(['$(ref.', context.properties['controllerGSA'], '.email)']),
+            },
+        })
+        resources.append({
+            'name': 'broker-gsa-permissions',
+            'type': 'gcp-types/cloudresourcemanager-v1:virtual.projects.iamMemberBinding',
+            'properties': {
+                'resource': context.env['project'],
+                # TODO: Reduce scope.
+                'role': 'roles/editor',
+                'member': ''.join(['$(ref.', context.properties['brokerGSA'], '.email)']),
+            },
+        })
+        resources.append({
+            'name': 'sources-gsa-permissions',
+            'type': 'gcp-types/cloudresourcemanager-v1:virtual.projects.iamMemberBinding',
+            'properties': {
+                'resource': context.env['project'],
+                # TODO: Reduce scope.
+                'role': 'roles/editor',
+                'member': ''.join(['$(ref.', context.properties['sourcesGSA'], '.email)']),
+            },
+        })
 
     # 5. Binds the Controller and Broker data plane KSAs to their GSAs.
     controlPlaneKsaAnnotations = {
@@ -224,3 +261,29 @@ def GenerateConfig(context):
     })
 
     return {'resources': resources}
+
+
+def activateAPIResources(context, apis):
+    resources = []
+    for index, api in apis:
+        depends_on = []
+        # Serialize the activation of all the apis by making api_n depend on api_n-1
+        if (not context.properties['concurrentAPIActivation']) and index != 0:
+            depends_on.append(
+                ApiResourceName(context.env['project'], context.properties['apis'][index-1]))
+        resources.append({
+            'name': ApiResourceName(context.env['project'], api),
+            'type': 'deploymentmanager.v2.virtual.enableService',
+            'metadata': {
+                'dependsOn': depends_on
+            },
+            'properties': {
+                'consumerId': 'project:' + context.env['project'],
+                'serviceName': api
+            }
+        })
+    return resources
+
+
+def ApiResourceName(project_id, api_name):
+    return project_id + '-' + api_name
