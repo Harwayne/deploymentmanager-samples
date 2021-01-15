@@ -90,6 +90,7 @@ def GenerateConfig(context):
                     'releaseChannel': {
                         'channel': 'RAPID',
                     },
+
                 }
             }
         }

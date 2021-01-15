@@ -17,17 +17,21 @@
 def GenerateConfig(context):
     """Create a Knative Service."""
 
-    propertiesWithoutTypeProvider = context.properties.copy()
-    del propertiesWithoutTypeProvider['typeProvider']
-    propertiesWithoutTypeProvider['apiVersion'] = 'serving.knative.dev/v1'
-    propertiesWithoutTypeProvider['kind'] = 'Service'
-    if 'name' not in propertiesWithoutTypeProvider['metadata']:
-        propertiesWithoutTypeProvider['metadata']['name'] = context.env['name']
-    resources = [{
+    propertiesWithoutDmMeta = context.properties.copy()
+    del propertiesWithoutDmMeta['dmMeta']
+    propertiesWithoutDmMeta['apiVersion'] = 'serving.knative.dev/v1'
+    propertiesWithoutDmMeta['kind'] = 'Service'
+    if 'name' not in propertiesWithoutDmMeta['metadata']:
+        propertiesWithoutDmMeta['metadata']['name'] = context.env['name']
+    ksvc = {
         'name': context.env['name'],
-        'type': ''.join([context.env['project'], '/', context.properties['typeProvider'], ':',
+        'type': ''.join([context.env['project'], '/', context.properties['dmMeta']['typeProvider'], ':',
                          '/apis/serving.knative.dev/v1/namespaces/{namespace}/services/{name}']),
-        'properties': propertiesWithoutTypeProvider,
-    }]
+        'properties': propertiesWithoutDmMeta,
+    }
+    if 'dependsOn' in context.properties['dmMeta']:
+        ksvc['metadata'] = {
+            'dependsOn': context.properties['dmMeta']['dependsOn'],
+        }
 
-    return {'resources': resources}
+    return {'resources': [ksvc]}

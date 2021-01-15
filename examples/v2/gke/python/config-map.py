@@ -17,17 +17,22 @@
 def GenerateConfig(context):
     """Create a ConfigMap."""
 
-    propertiesWithoutTypeProvider = context.properties.copy()
-    del propertiesWithoutTypeProvider['typeProvider']
-    propertiesWithoutTypeProvider['apiVersion'] = 'v1'
-    propertiesWithoutTypeProvider['kind'] = 'ConfigMap'
-    if 'name' not in propertiesWithoutTypeProvider['metadata']:
-        propertiesWithoutTypeProvider['metadata']['name'] = context.env['name']
-    resources = [{
+    propertiesWithoutDmMeta = context.properties.copy()
+    del propertiesWithoutDmMeta['dmMeta']
+    propertiesWithoutDmMeta['apiVersion'] = 'v1'
+    propertiesWithoutDmMeta['kind'] = 'ConfigMap'
+    if 'name' not in propertiesWithoutDmMeta['metadata']:
+        propertiesWithoutDmMeta['metadata']['name'] = context.env['name']
+    cm = {
         'name': context.env['name'],
-        'type': ''.join([context.env['project'], '/', context.properties['typeProvider'], ':',
+        'type': ''.join([context.env['project'], '/', context.properties['dmMeta']['typeProvider'], ':',
                          '/api/v1/namespaces/{namespace}/configmaps/{name}']),
-        'properties': propertiesWithoutTypeProvider,
-    }]
+        'properties': propertiesWithoutDmMeta,
+    }
 
-    return {'resources': resources}
+    if 'dependsOn' in context.properties['dmMeta']:
+        cm['metadata'] = {
+            'dependsOn': context.properties['dmMeta']['dependsOn'],
+        }
+
+    return {'resources': [cm]}

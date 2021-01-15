@@ -17,10 +17,21 @@ info:
   author: Google, Inc.
 
 required:
-- typeProvider
+- dmMeta
 - metadata
 
 properties:
+  dmMeta:
+    required:
+      - typeProvider
+    properties:
+      typeProvider:
+        type: string
+        description: The name of the TypeProvider object for the cluster. Assumed to exist in the project the deployment is running in.
+      dependsOn:
+        type: array
+        items:
+          type: string
   typeProvider:
     type: string
     description: The name of the TypeProvider object for the cluster. Assumed to exist in the project the deployment is running in.
