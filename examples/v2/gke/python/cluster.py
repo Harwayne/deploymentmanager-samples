@@ -90,19 +90,6 @@ def GenerateConfig(context):
                     'releaseChannel': {
                         'channel': 'RAPID',
                     },
-
-
-                    'nodeConfig': {
-                        'oauthScopes': [
-                            'https://www.googleapis.com/auth/' + s
-                            for s in [
-                                'compute',
-                                'devstorage.read_only',
-                                'logging.write',
-                                'monitoring'
-                            ]
-                        ]
-                    }
                 }
             }
         }
