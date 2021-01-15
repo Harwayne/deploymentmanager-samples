@@ -18,7 +18,7 @@ imports:
   - path: config-map.py
 
 resources:
-  - name: all-in-one-cluster
+  - name: ksvc-plus-cluster
     type: cluster.py
     properties:
       zone: us-central1-a
@@ -28,9 +28,9 @@ resources:
       # These are properties used by the template, not part of the Knative Service's YAML itself.
       dmMeta:
         # This is the name of the TypeProvider, it does not include the project.
-        typeProvider: $(ref.all-in-one-cluster.clusterType)
+        typeProvider: $(ref.ksvc-plus-cluster.clusterType)
         dependsOn:
-          - $(ref.all-in-one-cluster.clusterType)
+          - $(ref.ksvc-plus-cluster.clusterType)
       # Everything else is a complete Knative Service's YAML. The apiVersion, kind, and metadata.name will be filled in automatically. Everything else is manual.
       metadata:
         namespace: default
@@ -56,9 +56,9 @@ resources:
       # These are properties used by the template, not part of the Knative Service's YAML itself.
       dmMeta:
         # This is the name of the TypeProvider, it does not include the project.
-        typeProvider: $(ref.all-in-one-cluster.clusterType)
+        typeProvider: $(ref.ksvc-plus-cluster.clusterType)
         dependsOn:
-          - $(ref.all-in-one-cluster.clusterType)
+          - $(ref.ksvc-plus-cluster.clusterType)
       # Everything else is a complete ConfigMap's YAML. The apiVersion, kind, and metadata.name will be filled in automatically. Everything else is manual.
       metadata:
         namespace: default
