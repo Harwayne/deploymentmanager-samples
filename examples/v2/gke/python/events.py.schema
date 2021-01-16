@@ -20,12 +20,17 @@ imports:
   - path: config-map.py
 
 required:
+  - stage
   - typeProvider
-  - initialCreation
 
 properties:
-  initialCreation:
-    type: boolean
+  stage:
+    type: string
+    enum:
+      - 1_clusterCreate
+      - 2_acquireOperator
+      - 3_installEventing
+      - 4_initializeEventing
   activateAPIsOnProject:
     type: boolean
     default: false

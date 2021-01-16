@@ -25,6 +25,6 @@ resources:
   - name: events
     type: events.py
     properties:
-      initialCreation: true
+      stage: 4_initializeEventing
       dependsOnTypeProvider: true
       typeProvider: $(ref.events-plus-cluster.clusterType)

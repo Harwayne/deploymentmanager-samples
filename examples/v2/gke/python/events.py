@@ -13,6 +13,11 @@
 # limitations under the License.
 """Create configuration to deploy Kubernetes resources."""
 
+clusterCreateStage = '1_clusterCreate'
+acquireOperatorStage = '2_acquireOperator'
+installEventingStage = '3_installEventing'
+initializeEventing = '4_initializeEventing'
+
 
 def GenerateConfig(context):
     """Activate Knative-GCP on a given GKE cluster using workload-identity-gsa.
@@ -33,6 +38,10 @@ def GenerateConfig(context):
                        '/api/v1/namespaces/{namespace}/serviceaccounts/{name}'])
 
     resources = []
+
+    if context.properties['stage'] == clusterCreateStage:
+        # We want to give th operator a bit of time to get ready.
+        return {'resources': resources}
 
     # 1. Enables the required APIs on the project (optional).
     if context.properties['activateAPIsOnProject']:
@@ -58,6 +67,11 @@ def GenerateConfig(context):
     dependsOnTypeProviderAndOperatorEnable.append(operatorEnableEventingName)
 
     # 2. Installs eventing via the CloudRun add-on operator.
+    eventingEnabled = True
+    if context.properties['stage'] == acquireOperatorStage:
+        # We will only acquire the operator during clusterCreate, so make sure it has a different spec when it will be updated.
+        eventingEnabled = False
+
     resources.append({
         'name': operatorEnableEventingName,
         'type': operatorType,
@@ -74,11 +88,16 @@ def GenerateConfig(context):
             },
             'spec': {
                 'eventing': {
-                    'enabled': True,
+                    'enabled': eventingEnabled,
                 },
             },
         },
     })
+
+    if context.properties['stage'] == acquireOperatorStage:
+        # We just want to acquire the Operator.
+        return {'resources': resources}
+
     # 3. Creates the three GSAs.
     #     - Includes giving the Controller GSA service account admin on the Sources GSA.
     #     - Includes binding the KSAs to the Controller and Broker data plane GSAs.
@@ -183,11 +202,12 @@ def GenerateConfig(context):
         })
 
     # 5. Binds the Controller and Broker data plane KSAs to their GSAs.
-    controlPlaneKsaAnnotations = {
+    controllerKsaAnnotations = {
         'iam.gke.io/gcp-service-account': ''.join([context.properties['controllerGSA'], '@', context.env['project'], '.iam.gserviceaccount.com']),
-    },
-    if context.properties['initialCreation']:
-        controlPlaneKsaAnnotations = {}
+    }
+    if context.properties['stage'] == installEventingStage:
+        # We need to first acquire, then update the KSAs, so make sure there is a spec difference during the update.
+        controllerKsaAnnotations = {}
     resources.append({
         'name': 'control-plane-ksa',
         'type': ksaType,
@@ -201,14 +221,15 @@ def GenerateConfig(context):
             'metadata': {
                 'namespace': 'cloud-run-events',
                 'name': 'controller',
-                'annotations': controlPlaneKsaAnnotations,
+                'annotations': controllerKsaAnnotations,
             },
         },
     })
     brokerKsaAnnotations = {
         'iam.gke.io/gcp-service-account': ''.join([context.properties['brokerGSA'], '@', context.env['project'], '.iam.gserviceaccount.com']),
     }
-    if context.properties['initialCreation']:
+    if context.properties['stage'] == installEventingStage:
+        # We need to first acquire, then update the KSAs, so make sure there is a spec difference during the update.
         brokerKsaAnnotations = {}
     resources.append({
         'name': 'broker-ksa',
@@ -232,7 +253,8 @@ def GenerateConfig(context):
     configGcpAuthAnnotations = {
         'events.cloud.google.com/initialized': 'true',
     }
-    if context.properties['initialCreation']:
+    if context.properties['stage'] == installEventingStage:
+        # We need to first acquire, then update the ConfigMap, so make sure there is a spec difference during the update.
         configGcpAuthAnnotations = {}
     resources.append({
         'name': 'config-gcp-auth',
